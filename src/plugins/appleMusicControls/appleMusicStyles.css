@@ -283,13 +283,18 @@
 }
 
 #vc-apple-music-favorite-button.vc-apple-music-favorite-on {
-    color: var(--vc-apple-music-accent);
-    background-color: var(--vc-apple-music-accent-90);
+    color: #ffffff;
+    background-color: transparent;
+}
+
+#vc-apple-music-favorite-button.vc-apple-music-favorite-on .vc-apple-music-favorite-icon {
+    fill: #ffffff;
+    stroke: #ffffff;
 }
 
 #vc-apple-music-favorite-button.vc-apple-music-favorite-on:hover:not(:disabled) {
-    color: var(--vc-apple-music-accent);
-    background-color: var(--vc-apple-music-accent-80);
+    color: #ffffff;
+    background-color: var(--background-mod-strong, rgba(78, 80, 88, 0.48));
 }
 
 #vc-apple-music-favorite-button.vc-apple-music-favorite-busy .vc-apple-music-favorite-icon {

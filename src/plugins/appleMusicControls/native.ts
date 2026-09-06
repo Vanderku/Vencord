@@ -1548,16 +1548,211 @@ async function getRawTrackDataForPlatform(): Promise<RawTrackData | null> {
     }
 }
 
+function windowsUiFallbackScript(action: ControlAction, value?: number | boolean) {
+    const numericValue = typeof value === "number" && Number.isFinite(value) ? value : 0;
+    const booleanValue = value === true ? "$true" : "$false";
+    const actionValue = JSON.stringify(action);
+
+    return String.raw`
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+Add-Type -AssemblyName UIAutomationClient | Out-Null
+Add-Type -AssemblyName UIAutomationTypes | Out-Null
+${AWAIT_HELPER}
+${GET_SESSION}
+
+function Get-AppleMusicRoot {
+    $processes = @(Get-Process -Name AppleMusic -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
+    foreach ($process in $processes) {
+        try {
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
+            if ($null -ne $root) { return $root }
+        } catch { }
+    }
+    return $null
+}
+
+function Get-BestButton($root, [string]$kind) {
+    if ($null -eq $root) { return $null }
+    $windowRect = $root.Current.BoundingRectangle
+    $topBand = $windowRect.Top + [Math]::Min(320, [Math]::Max(170, $windowRect.Height * 0.30))
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button
+    )
+    $buttons = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    $best = $null
+    $bestScore = -100000
+
+    foreach ($button in $buttons) {
+        try {
+            $name = [string]$button.Current.Name
+            $help = [string]$button.Current.HelpText
+            $automationId = [string]$button.Current.AutomationId
+            $combined = ($name + ' ' + $help + ' ' + $automationId).ToLowerInvariant()
+
+            $matches = $false
+            if ($kind -eq 'shuffle') {
+                $matches = $combined -match '(shuffle|miesz|losow|zufall|al[eé]atoire|aleatori|casual|willekeurig|bland|tilfeld|sekoit|karıştır)'
+            } elseif ($kind -eq 'repeat') {
+                $matches = $combined -match '(repeat|powtarz|wiederhol|r[eé]p[eé]t|repet|ripeti|herhaal|upprepa|gjenta|toista|tekrar)'
+            }
+            if (-not $matches) { continue }
+
+            $rect = $button.Current.BoundingRectangle
+            if ($rect.Width -le 0 -or $rect.Height -le 0) { continue }
+            $score = 0
+            if ($rect.Top -le $topBand) { $score += 120 } else { $score -= 120 }
+            if ($automationId.ToLowerInvariant() -match $kind) { $score += 35 }
+            if ($rect.Width -le 80 -and $rect.Height -le 80) { $score += 20 }
+
+            $windowCenterX = $windowRect.Left + ($windowRect.Width / 2)
+            $buttonCenterX = $rect.Left + ($rect.Width / 2)
+            $score -= [Math]::Min(35, [Math]::Abs($buttonCenterX - $windowCenterX) / 55)
+
+            if ($score -gt $bestScore) { $bestScore = $score; $best = $button }
+        } catch { }
+    }
+    if ($bestScore -gt 0) { return $best }
+    return $null
+}
+
+function Invoke-Button($button) {
+    if ($null -eq $button) { return $false }
+    try {
+        $toggle = [System.Windows.Automation.TogglePattern]$button.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+        if ($null -ne $toggle) { $toggle.Toggle(); return $true }
+    } catch { }
+    try {
+        $invoke = [System.Windows.Automation.InvokePattern]$button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+        if ($null -ne $invoke) { $invoke.Invoke(); return $true }
+    } catch { }
+    return $false
+}
+
+function Set-PlaybackSlider($root, [double]$targetSeconds) {
+    if ($null -eq $root) { return $false }
+    $session = Get-AppleMusicSession $manager
+    if ($null -eq $session) { return $false }
+    $timeline = $session.GetTimelineProperties()
+    $duration = [Math]::Max(0.0, ($timeline.EndTime - $timeline.StartTime).TotalSeconds)
+    $current = [Math]::Max(0.0, ($timeline.Position - $timeline.StartTime).TotalSeconds)
+    if ($duration -le 0) { return $false }
+
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Slider
+    )
+    $sliders = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    $windowRect = $root.Current.BoundingRectangle
+    $topBand = $windowRect.Top + [Math]::Min(360, [Math]::Max(190, $windowRect.Height * 0.34))
+    $currentRatio = [Math]::Min(1.0, [Math]::Max(0.0, $current / $duration))
+    $targetRatio = [Math]::Min(1.0, [Math]::Max(0.0, $targetSeconds / $duration))
+    $bestPattern = $null
+    $bestScore = -100000
+
+    foreach ($slider in $sliders) {
+        try {
+            $range = [System.Windows.Automation.RangeValuePattern]$slider.GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern)
+            if ($null -eq $range -or $range.Current.IsReadOnly) { continue }
+            $min = [double]$range.Current.Minimum
+            $max = [double]$range.Current.Maximum
+            if ($max -le $min) { continue }
+
+            $name = [string]$slider.Current.Name
+            $help = [string]$slider.Current.HelpText
+            $automationId = [string]$slider.Current.AutomationId
+            $combined = ($name + ' ' + $help + ' ' + $automationId).ToLowerInvariant()
+            if ($combined -match '(volume|głoś|glos|lautst|audio volume|airplay)') { continue }
+
+            $valueRatio = ([double]$range.Current.Value - $min) / ($max - $min)
+            $distance = [Math]::Abs($valueRatio - $currentRatio)
+            $score = 100 - [Math]::Min(100, $distance * 240)
+            if ($combined -match '(playback|position|timeline|scrub|seek|progress|time|post[eę]p|pozyc|odtwarz|utw[oó]r)') { $score += 130 }
+
+            $rect = $slider.Current.BoundingRectangle
+            if ($rect.Width -gt 0 -and $rect.Height -gt 0 -and $rect.Top -le $topBand) { $score += 70 }
+            if ($rect.Width -gt 180) { $score += 25 }
+
+            if ($score -gt $bestScore) { $bestScore = $score; $bestPattern = $range }
+        } catch { }
+    }
+
+    if ($null -eq $bestPattern -or $bestScore -lt 25) { return $false }
+    $min = [double]$bestPattern.Current.Minimum
+    $max = [double]$bestPattern.Current.Maximum
+    $desired = $min + (($max - $min) * $targetRatio)
+    $bestPattern.SetValue($desired)
+    return $true
+}
+
+$action = ${actionValue}
+$root = Get-AppleMusicRoot
+if ($null -eq $root) { Write-Output 'false'; exit 0 }
+
+if ($action -eq 'seek') {
+    if (Set-PlaybackSlider $root ${numericValue}) { Write-Output 'true' } else { Write-Output 'false' }
+    exit 0
+}
+
+$session = Get-AppleMusicSession $manager
+if ($null -eq $session) { Write-Output 'false'; exit 0 }
+$playback = $session.GetPlaybackInfo()
+
+if ($action -eq 'shuffle') {
+    $desired = ${booleanValue}
+    $current = $false
+    try { $current = [bool]$playback.IsShuffleActive } catch { }
+    if ($current -eq $desired) { Write-Output 'true'; exit 0 }
+    $button = Get-BestButton $root 'shuffle'
+    if (Invoke-Button $button) { Write-Output 'true' } else { Write-Output 'false' }
+    exit 0
+}
+
+if ($action -eq 'repeat') {
+    $target = [int]${numericValue}
+    if ($target -lt 0 -or $target -gt 2) { Write-Output 'false'; exit 0 }
+    $current = 0
+    try { $current = [int]$playback.AutoRepeatMode } catch { }
+    if ($current -eq $target) { Write-Output 'true'; exit 0 }
+    $button = Get-BestButton $root 'repeat'
+    if ($null -eq $button) { Write-Output 'false'; exit 0 }
+
+    $clicks = 0
+    while ($current -ne $target -and $clicks -lt 3) {
+        if (-not (Invoke-Button $button)) { Write-Output 'false'; exit 0 }
+        Start-Sleep -Milliseconds 140
+        if ($current -eq 0) { $current = 2 }
+        elseif ($current -eq 2) { $current = 1 }
+        else { $current = 0 }
+        $clicks++
+    }
+    if ($current -eq $target) { Write-Output 'true' } else { Write-Output 'false' }
+    exit 0
+}
+
+Write-Output 'false'
+`;
+}
+
+async function controlWindows(action: ControlAction, value?: number | boolean) {
+    try {
+        const result = await execPowerShell(controlScript(action, value));
+        if (result.toLowerCase().split(/\s+/).at(-1) === "true") return true;
+    } catch { }
+
+    if (action !== "seek" && action !== "shuffle" && action !== "repeat") return false;
+    try {
+        const fallback = await execPowerShell(windowsUiFallbackScript(action, value), 6000);
+        return fallback.toLowerCase().split(/\s+/).at(-1) === "true";
+    } catch {
+        return false;
+    }
+}
+
 async function controlForPlatform(action: ControlAction, value?: number | boolean) {
     switch (process.platform) {
-        case "win32": {
-            try {
-                const result = await execPowerShell(controlScript(action, value));
-                return result.toLowerCase().split(/\s+/).at(-1) === "true";
-            } catch {
-                return false;
-            }
-        }
+        case "win32": return controlWindows(action, value);
         case "darwin": return controlMac(action, value);
         case "linux": return controlLinux(action, value);
         default: return false;
@@ -1571,8 +1766,17 @@ export async function getTrackData(_: IpcMainInvokeEvent, onlineMetadata = true)
     if (!raw?.name) return null;
 
     const remote = getRemoteDataNonBlocking(raw, allowOnlineMetadata);
+    const windowsFallbacks = raw.platform === "windows"
+        ? {
+            canSeek: raw.duration > 0,
+            canShuffle: true,
+            canRepeat: true,
+        }
+        : {};
+
     return {
         ...raw,
+        ...windowsFallbacks,
         repeat: raw.repeat as RepeatMode,
         ...remote,
     };
