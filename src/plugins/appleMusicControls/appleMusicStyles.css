@@ -1,0 +1,313 @@
+/*
+ * AppleMusicControls for Vencord
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Layout intentionally follows the compact geometry of Vencord SpotifyControls.
+ */
+
+#vc-apple-music-player {
+    padding: 12px;
+    margin: 0;
+    background: var(--background-base-low, #1e1f22);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+
+    --vc-apple-music-accent: var(--apple-music, #fa2d48);
+    --vc-apple-music-accent-90: color-mix(in hsl, var(--vc-apple-music-accent), transparent 90%);
+    --vc-apple-music-accent-80: color-mix(in hsl, var(--vc-apple-music-accent), transparent 80%);
+    --vc-apple-music-text: #f2f3f5;
+    --vc-apple-music-text-muted: #b5bac1;
+    --vc-apple-music-icon: #f2f3f5;
+    --vc-apple-music-icon-hover: #ffffff;
+}
+
+.theme-light #vc-apple-music-player {
+    --vc-apple-music-text: #060607;
+    --vc-apple-music-text-muted: #4e5058;
+    --vc-apple-music-icon: #4e5058;
+    --vc-apple-music-icon-hover: #060607;
+}
+
+.vc-apple-music-button {
+    margin: 0 2px;
+    border: 0;
+    border-radius: var(--radius-sm, 4px);
+    background: none;
+    color: var(--vc-apple-music-icon);
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
+.vc-apple-music-button:hover:not(:disabled) {
+    color: var(--vc-apple-music-icon-hover);
+    background-color: var(--background-mod-strong, rgba(78, 80, 88, 0.48));
+}
+
+.vc-apple-music-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.vc-apple-music-button-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.vc-apple-music-shuffle .vc-apple-music-button-icon,
+.vc-apple-music-repeat .vc-apple-music-button-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.vc-apple-music-repeat-context,
+.vc-apple-music-repeat-track,
+.vc-apple-music-shuffle-on {
+    color: var(--vc-apple-music-accent);
+    background-color: var(--vc-apple-music-accent-90);
+}
+
+.vc-apple-music-repeat-context:hover:not(:disabled),
+.vc-apple-music-repeat-track:hover:not(:disabled),
+.vc-apple-music-shuffle-on:hover:not(:disabled) {
+    color: var(--vc-apple-music-accent);
+    background-color: var(--vc-apple-music-accent-80);
+}
+
+.vc-apple-music-repeat-1 {
+    font-size: 70%;
+    font-weight: 700;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.vc-apple-music-button-row {
+    justify-content: center;
+    margin-top: 7px;
+}
+
+#vc-apple-music-info-wrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 3.15em;
+    gap: 0.55em;
+    min-width: 0;
+}
+
+#vc-apple-music-album-wrapper {
+    flex: 0 0 auto;
+    height: 90%;
+    aspect-ratio: 1;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+#vc-apple-music-album-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 3px;
+    transition: filter 0.2s;
+    cursor: pointer;
+}
+
+#vc-apple-music-album-image:hover {
+    filter: brightness(1.2);
+}
+
+#vc-apple-music-album-expanded-wrapper {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 6px;
+}
+
+#vc-apple-music-album-expanded-wrapper #vc-apple-music-album-image {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: cover;
+}
+
+#vc-apple-music-album-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    background:
+        radial-gradient(circle at 28% 20%, color-mix(in srgb, var(--vc-apple-music-accent), transparent 55%), transparent 55%),
+        var(--background-base-lower, #111214);
+    color: var(--vc-apple-music-text);
+}
+
+#vc-apple-music-album-fallback .vc-apple-music-button-icon {
+    width: 23px;
+    height: 23px;
+}
+
+#vc-apple-music-titles {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    padding: 0.2rem;
+    align-items: flex-start;
+    place-content: flex-start center;
+    overflow: hidden;
+}
+
+#vc-apple-music-song-title {
+    color: var(--vc-apple-music-text) !important;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+#vc-apple-music-song-title[role="link"]:hover {
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.vc-apple-music-secondary-song-info {
+    color: var(--vc-apple-music-text-muted) !important;
+    font-size: 12px;
+}
+
+.vc-apple-music-ellipoverflow {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#vc-apple-music-progress-wrap {
+    width: 100%;
+    margin-top: 9px;
+    user-select: none;
+}
+
+#vc-apple-music-progress-bar {
+    width: 100%;
+    height: 18px;
+    display: flex;
+    align-items: center;
+}
+
+#vc-apple-music-progress-bar > [class*="slider"] {
+    flex-grow: 1;
+    width: 100%;
+    min-width: 0;
+    padding: 0 !important;
+}
+
+#vc-apple-music-progress-bar > [class*="slider"] [class*="bar"] {
+    height: 4px !important;
+    border-radius: 999px !important;
+    top: calc(12px - 4px / 2 + var(--bar-offset));
+    background-color: var(--background-mod-strong, rgba(78, 80, 88, 0.6));
+}
+
+#vc-apple-music-progress-bar > [class*="slider"] [class*="barFill"] {
+    border-radius: 999px !important;
+    background-color: var(--vc-apple-music-icon-hover);
+}
+
+.vc-apple-music-seek-enabled #vc-apple-music-progress-bar:hover > [class*="slider"] [class*="barFill"] {
+    background-color: var(--vc-apple-music-accent);
+}
+
+#vc-apple-music-progress-bar > [class*="slider"] [class*="grabber"] {
+    height: 12px !important;
+    width: 12px !important;
+    margin-top: calc(13px / -2 + var(--bar-offset) / 2);
+    margin-left: 1px;
+    border: 0 !important;
+    border-radius: 50%;
+    background-color: var(--vc-apple-music-icon-hover);
+    color: var(--vc-apple-music-icon-hover);
+    opacity: 0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    transition: opacity 0.1s, transform 0.1s;
+}
+
+.vc-apple-music-seek-enabled #vc-apple-music-progress-wrap:hover #vc-apple-music-progress-bar > [class*="slider"] [class*="grabber"] {
+    opacity: 1;
+}
+
+.vc-apple-music-seek-enabled #vc-apple-music-progress-bar > [class*="slider"] {
+    cursor: pointer;
+}
+
+.vc-apple-music-seek-disabled #vc-apple-music-progress-bar {
+    opacity: 0.58;
+}
+
+#vc-apple-music-time-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 14px;
+    margin-top: -1px;
+}
+
+.vc-apple-music-progress-time {
+    color: var(--vc-apple-music-text-muted) !important;
+    font-size: 10px;
+    line-height: 12px;
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-code);
+}
+
+#vc-apple-music-favorite-button {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    margin-left: 2px;
+    border-radius: 50%;
+}
+
+#vc-apple-music-favorite-button .vc-apple-music-favorite-icon {
+    width: 19px;
+    height: 19px;
+}
+
+#vc-apple-music-favorite-button.vc-apple-music-favorite-on {
+    color: var(--vc-apple-music-accent);
+    background-color: var(--vc-apple-music-accent-90);
+}
+
+#vc-apple-music-favorite-button.vc-apple-music-favorite-on:hover:not(:disabled) {
+    color: var(--vc-apple-music-accent);
+    background-color: var(--vc-apple-music-accent-80);
+}
+
+#vc-apple-music-favorite-button.vc-apple-music-favorite-busy .vc-apple-music-favorite-icon {
+    animation: vc-apple-music-heart-pulse 0.75s ease-in-out infinite alternate;
+}
+
+@keyframes vc-apple-music-heart-pulse {
+    from { transform: scale(0.88); opacity: 0.65; }
+    to { transform: scale(1.05); opacity: 1; }
+}
+
+@media (max-width: 250px) {
+    #vc-apple-music-player {
+        padding-inline: 10px;
+    }
+
+    .vc-apple-music-button {
+        margin-inline: 0;
+        width: 31px;
+    }
+}
