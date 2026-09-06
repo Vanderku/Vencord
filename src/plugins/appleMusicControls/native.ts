@@ -98,7 +98,12 @@ $manager = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessi
 function Get-AppleMusicSession($Manager) {
     foreach ($session in $Manager.GetSessions()) {
         $id = [string]$session.SourceAppUserModelId
-        if ($id -eq 'AppleInc.AppleMusicWin_nzyj5cx40ttqa!App' -or $id -like 'AppleInc.AppleMusicWin_nzyj5cx40ttqa!*') {
+        if (
+            $id -eq 'AppleInc.AppleMusicWin_nzyj5cx40ttqa!App' -or
+            $id -like 'AppleInc.AppleMusicWin_nzyj5cx40ttqa!*' -or
+            $id -like 'AppleInc.AppleMusicWin*!*' -or
+            $id -match '(?i)AppleMusic'
+        ) {
             return $session
         }
     }
@@ -122,7 +127,7 @@ while ($true) {
 
         $playback = $session.GetPlaybackInfo()
         $status = [int]$playback.PlaybackStatus
-        if ($status -ne 4 -and $status -ne 5) {
+        if ($status -lt 3) {
             Write-Output 'null'
             Start-Sleep -Milliseconds ${WATCH_INTERVAL_MS}
             continue
@@ -183,6 +188,72 @@ while ($true) {
 function encodePowerShell(script: string) {
     return Buffer.from(script, "utf16le").toString("base64");
 }
+
+
+const WINDOWS_QUERY_SCRIPT = String.raw`
+$ErrorActionPreference = 'SilentlyContinue'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+${AWAIT_HELPER}
+${GET_SESSION}
+try {
+    $session = Get-AppleMusicSession $manager
+    if ($null -eq $session) { Write-Output 'null'; exit 0 }
+
+    $playback = $session.GetPlaybackInfo()
+    $status = [int]$playback.PlaybackStatus
+    if ($status -lt 3) { Write-Output 'null'; exit 0 }
+
+    $props = Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+    if ($null -eq $props -or [string]::IsNullOrWhiteSpace([string]$props.Title)) { Write-Output 'null'; exit 0 }
+
+    $timeline = $session.GetTimelineProperties()
+    $controls = $playback.Controls
+
+    $shuffle = $false
+    try { $shuffle = [bool]$playback.IsShuffleActive } catch { }
+
+    $repeat = 0
+    try { $repeat = [int]$playback.AutoRepeatMode } catch { }
+
+    $rate = 1.0
+    try {
+        if ($null -ne $playback.PlaybackRate -and [double]$playback.PlaybackRate -gt 0) {
+            $rate = [double]$playback.PlaybackRate
+        }
+    } catch { }
+
+    $start = [Math]::Max(0, $timeline.StartTime.TotalSeconds)
+    $end = [Math]::Max($start, $timeline.EndTime.TotalSeconds)
+    $position = [Math]::Max($start, $timeline.Position.TotalSeconds)
+
+    [PSCustomObject]@{
+        name = [string]$props.Title
+        artist = [string]$props.Artist
+        album = [string]$props.AlbumTitle
+        playing = ($status -eq 4)
+        position = [Math]::Max(0, $position - $start)
+        duration = [Math]::Max(0, $end - $start)
+        startTime = $start
+        shuffle = $shuffle
+        repeat = $repeat
+        playbackRate = $rate
+        canPlay = [bool]$controls.IsPlayEnabled
+        canPause = [bool]$controls.IsPauseEnabled
+        canToggle = [bool]$controls.IsPlayPauseToggleEnabled
+        canNext = [bool]$controls.IsNextEnabled
+        canPrevious = [bool]$controls.IsPreviousEnabled
+        canSeek = [bool]$controls.IsPlaybackPositionEnabled
+        canShuffle = [bool]$controls.IsShuffleEnabled
+        canRepeat = [bool]$controls.IsRepeatEnabled
+        canStop = [bool]$controls.IsStopEnabled
+        canFastForward = [bool]$controls.IsFastForwardEnabled
+        canRewind = [bool]$controls.IsRewindEnabled
+        canPlaybackRate = [bool]$controls.IsPlaybackRateEnabled
+    } | ConvertTo-Json -Compress
+} catch {
+    Write-Output 'null'
+}
+`;
 
 function normalizeAppleMetadata(raw: RawTrackData): RawTrackData {
     let artist = (raw.artist || "").trim();
@@ -832,8 +903,28 @@ async function getWindowsRawTrackData(): Promise<RawTrackData | null> {
     if (latestUpdate && Date.now() - latestUpdate > STALE_WATCHER_MS) stopWatcherInternal();
     startWatcher();
     if (!latestUpdate) await waitForFirstWatcherValue();
-    if (!latestRaw?.name) return null;
-    return normalizeAppleMetadata({ ...latestRaw, platform: "windows", source: "Apple Music for Windows (GSMTC)" });
+
+    if (latestRaw?.name) {
+        return normalizeAppleMetadata({ ...latestRaw, platform: "windows", source: "Apple Music for Windows (GSMTC watcher)" });
+    }
+
+    // Fallback: query GSMTC directly. This covers cases where the long-lived watcher
+    // started before Apple Music registered its media session or PowerShell exited early.
+    try {
+        const output = (await execPowerShell(WINDOWS_QUERY_SCRIPT, 5000)).trim();
+        if (output && output !== "null") {
+            const direct = normalizeAppleMetadata(JSON.parse(output) as RawTrackData);
+            if (direct.name) {
+                latestRaw = direct;
+                latestUpdate = Date.now();
+                return normalizeAppleMetadata({ ...direct, platform: "windows", source: "Apple Music for Windows (GSMTC direct fallback)" });
+            }
+        }
+    } catch (error) {
+        console.error("[AppleMusicControls] Direct Windows GSMTC query failed", error);
+    }
+
+    return null;
 }
 
 function parseAppleScriptBoolean(value: string | undefined) {

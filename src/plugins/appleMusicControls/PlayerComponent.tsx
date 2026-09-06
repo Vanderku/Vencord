@@ -383,6 +383,7 @@ function Info({ track, runControl, favoriteState, favoriteBusy, onToggleFavorite
 
 export function Player() {
     const [track, setTrack] = useState<(TrackData & { receivedAt: number; }) | null>(null);
+    const [backendError, setBackendError] = useState<string | null>(null);
     const [clock, setClock] = useState(Date.now());
     const [shouldHide, setShouldHide] = useState(false);
     const requestInFlight = useRef(false);
@@ -395,10 +396,14 @@ export function Player() {
         if (requestInFlight.current) return;
         requestInFlight.current = true;
         try {
+            if (!Native?.getTrackData) throw new Error("Native helper is unavailable. Rebuild and fully restart Discord.");
             const next = await Native.getTrackData(settings.store.onlineMetadata);
+            setBackendError(null);
             setTrack(next ? { ...next, receivedAt: Date.now() } : null);
-        } catch {
-            setTrack(null);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("[AppleMusicControls] Failed to read Apple Music session", error);
+            setBackendError(message || "Unknown backend error");
         } finally {
             requestInFlight.current = false;
         }
@@ -447,7 +452,17 @@ export function Player() {
         }
     }, [track?.name, track?.artist, track?.playing]);
 
-    if (!track || shouldHide) return null;
+    if (!track || shouldHide) {
+        if (!backendError) return null;
+
+        return (
+            <div id={cl("player")} className={cl("diagnostic")} aria-label="Apple Music controls error">
+                <div className={cl("diagnostic-title")}>AppleMusicControls</div>
+                <div className={cl("diagnostic-text")}>Backend unavailable</div>
+                <div className={cl("diagnostic-detail")}>{backendError}</div>
+            </div>
+        );
+    }
 
     const duration = Math.max(0, track.duration || 0);
     const livePosition = clamp(

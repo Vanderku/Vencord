@@ -311,3 +311,37 @@
         width: 31px;
     }
 }
+
+
+.vc-apple-music-diagnostic,
+#vc-apple-music-player.vc-apple-music-diagnostic {
+    padding: 10px 12px;
+    background: var(--background-base-low, #1e1f22);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+    color: #f2f3f5;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.vc-apple-music-diagnostic-title {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.vc-apple-music-diagnostic-text {
+    color: #dbdee1;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.vc-apple-music-diagnostic-detail {
+    color: #b5bac1;
+    font-size: 10px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}

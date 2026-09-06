@@ -254,7 +254,14 @@ export default definePlugin({
         return (
             <>
                 {IS_SUPPORTED_DESKTOP && (
-                    <ErrorBoundary fallback={() => null}>
+                    <ErrorBoundary
+                        fallback={error => (
+                            <div className="vc-apple-music-diagnostic">
+                                <strong>AppleMusicControls</strong>
+                                <span>Panel error. Check the console for details.</span>
+                            </div>
+                        )}
+                    >
                         <Player />
                     </ErrorBoundary>
                 )}
